@@ -1057,3 +1057,93 @@ body {
 .chart-y span { position:absolute; right:0; transform:translateY(-50%); font-size:10px; font-weight:700; color:#7b8982; white-space:nowrap; }
 .chart-wrap .balance-chart { flex:1; min-width:0; background:#fbfcfa; }
 .chart-days-aligned { margin-left:58px; padding:0 3%; }
+
+.split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.split-box { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,.12); color: #fff; }
+.split-box.free { background: rgba(242,183,5,.2); border: 1px solid rgba(242,183,5,.6); }
+.split-box span { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; opacity: .9; }
+.split-box strong { font-size: 18px; }
+.split-box small { font-size: 12px; opacity: .85; }
+.btn-alloc { min-height: 44px; margin-top: 6px; border: 0; border-radius: 12px; background: #f2b705; color: #3b2f00; font-weight: 800; cursor: pointer; }
+.btn-alloc:disabled { opacity: .5; cursor: not-allowed; }
+.action-row { display: flex; gap: 10px; margin-top: 16px; }
+.action-row button { flex: 1; min-height: 52px; }
+.sheet-backdrop { position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-end; justify-content: center; background: rgba(10,30,26,.5); }
+.sheet { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 12px; padding: 20px 20px 28px; border-radius: 24px 24px 0 0; background: #fff; }
+.sheet h2 { margin: 0; }
+.sheet-note { margin: 0; font-size: 14px; color: #5c7770; }
+.alloc-goals { display: flex; flex-direction: column; gap: 8px; }
+.alloc-goal { display: flex; justify-content: space-between; align-items: center; min-height: 52px; padding: 0 14px; border: 2px solid #e3ece7; border-radius: 14px; background: #fff; font: inherit; cursor: pointer; }
+.alloc-goal.on { border-color: #237a64; background: #eef7f2; }
+.quick-row { display: flex; gap: 8px; }
+.quick-row button { min-height: 44px; padding: 0 16px; border: 1px solid #cfdad5; border-radius: 999px; background: #fff; font-weight: 700; cursor: pointer; }
+
+/* Tempel di PALING BAWAH styles/globals.css */
+
+/* Hero: total saldo dibagi dua kantong */
+.split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.split-box { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 16px; background: rgba(255, 255, 255, .12); color: #fff; }
+.split-box.free { background: rgba(242, 183, 5, .2); border: 1px solid rgba(242, 183, 5, .6); }
+.split-box span { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; opacity: .9; }
+.split-box strong { font-size: 18px; }
+.split-box small { font-size: 12px; opacity: .85; }
+.btn-alloc { min-height: 44px; margin-top: 6px; border: 0; border-radius: 12px; background: #f2b705; color: #3b2f00; font-weight: 800; cursor: pointer; }
+.btn-alloc:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Tombol Uang masuk dan Catat keluar bersampingan */
+.action-row { display: flex; gap: 10px; margin-top: 16px; }
+.action-row button { flex: 1; min-height: 52px; }
+
+/* Sheet: form yang muncul dari bawah */
+.sheet-backdrop { position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-end; justify-content: center; background: rgba(10, 30, 26, .5); }
+.sheet { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 12px; padding: 20px 20px 28px; border-radius: 24px 24px 0 0; background: #fff; }
+.sheet h2 { margin: 0; }
+.sheet-note { margin: 0; font-size: 14px; color: #5c7770; }
+
+/* Pilihan target di sheet alokasi */
+.alloc-goals { display: flex; flex-direction: column; gap: 8px; }
+.alloc-goal { display: flex; justify-content: space-between; align-items: center; min-height: 52px; padding: 0 14px; border: 2px solid #e3ece7; border-radius: 14px; background: #fff; font: inherit; cursor: pointer; }
+.alloc-goal.on { border-color: #237a64; background: #eef7f2; }
+.quick-row { display: flex; gap: 8px; }
+.quick-row button { min-height: 44px; padding: 0 16px; border: 1px solid #cfdad5; border-radius: 999px; background: #fff; font-weight: 700; cursor: pointer; }
+
+/* Confetti (lewati bagian ini kalau sudah pernah ditempel) */
+.confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.confetti i { position: absolute; top: -5vh; width: 10px; height: 16px; border-radius: 2px; opacity: .9; animation: confetti-fall linear infinite; }
+@keyframes confetti-fall { to { transform: translateY(110vh) rotate(720deg); } }
+.feedback-content { position: relative; z-index: 2; }
+.feedback-icon { font-size: 56px; }
+
+.feedback-screen.spend-success .feedback-icon {
+  position: relative;
+  font-size: 64px;
+  transform-origin: 50% 90%;
+  animation: sad-sway 2.6s ease-in-out infinite;
+}
+.feedback-screen.spend-success .feedback-icon::after {
+  content: '💧';
+  position: absolute;
+  top: 58%;
+  left: 62%;
+  font-size: 18px;
+  opacity: 0;
+  animation: tear-drop 2.6s ease-in infinite;
+}
+@keyframes sad-sway {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25%      { transform: translateY(6px) rotate(-6deg); }
+  50%      { transform: translateY(10px) rotate(0deg); }
+  75%      { transform: translateY(6px) rotate(6deg); }
+}
+@keyframes tear-drop {
+  0%, 30% { opacity: 0; transform: translateY(0); }
+  40%     { opacity: 1; }
+  100%    { opacity: 0; transform: translateY(46px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feedback-screen.spend-success .feedback-icon,
+  .feedback-screen.spend-success .feedback-icon::after { animation: none; }
+}
+
+.sheet-error { margin: 0; padding: 10px 12px; border-radius: 12px; background: #fff1ea; color: #9a3412; font-size: 14px; font-weight: 700; }
+.sheet-warning { margin: 0; padding: 10px 12px; border-radius: 12px; background: #fff8dc; color: #8a6d00; font-size: 14px; font-weight: 700; }

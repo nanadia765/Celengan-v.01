@@ -125,6 +125,9 @@ export default function HomePage() {
   const [tab, setTab] = useState('home')
   const [st, setSt] = useState(null)
   const [tx, setTx] = useState([])
+  const [sheet, setSheet] = useState(null) // 'in' | 'out' | 'alloc' | null
+  const [allocGoalId, setAllocGoalId] = useState(null)
+  const [allocAmt, setAllocAmt] = useState('')
   const [addAmt, setAddAmt] = useState('')
   const [spendAmt, setSpendAmt] = useState('')
   const [moneyDrafts, setMoneyDrafts] = useState({})
@@ -143,6 +146,8 @@ export default function HomePage() {
   const [friendMessage, setFriendMessage] = useState('')
   const [friendMessageType, setFriendMessageType] = useState('info')
   const [friendsLoading, setFriendsLoading] = useState(false)
+  const [spendSource, setSpendSource] = useState('free') // 'free' atau id target
+  const [spendError, setSpendError] = useState('')
 
   useEffect(() => { init() }, [])
 
@@ -343,8 +348,14 @@ export default function HomePage() {
   }
 
   async function saveStateRow(patch) {
+    const { error } = await supabase.from('user_state').update(patch).eq('user_id', userId)
+    if (error) {
+      console.error(error)
+      alert('Gagal menyimpan: ' + error.message)
+      return false
+    }
     setSt(prev => ({ ...prev, ...patch }))
-    await supabase.from('user_state').update(patch).eq('user_id', userId)
+    return true
   }
 
   function updateMoneyDraft(key, value) {
@@ -405,7 +416,8 @@ export default function HomePage() {
       name,
       target,
       photo: goalPhoto || '',
-      is_primary: editingItem ? isGoalPrimary(editingItem) : true
+      is_primary: editingItem ? isGoalPrimary(editingItem) : true,
+      saved: editingItem?.saved || 0
     }
     const nextItems = editingItem
       ? goalItems.map(existing => existing.id === editingItem.id ? item : existing)
@@ -482,7 +494,8 @@ export default function HomePage() {
       goal_items: nextItems,
       goal_name: activeGoal?.name || '',
       goal_target: activeGoal?.target || 0,
-      proj_target: activeGoal?.target || 0
+      proj_target: activeGoal?.target || 0,
+      balance: st.balance + (removedGoal?.saved || 0)
     }
     const { error } = await supabase.from('user_state').update(patch).eq('user_id', userId)
     const savedLocally = storeGoalItems(userId, nextItems)
@@ -506,34 +519,94 @@ export default function HomePage() {
   async function addMoney() {
     const amt = parseThousands(addAmt)
     if (amt <= 0) return
-    await saveStateRow({
+    const saved = await saveStateRow({
       balance: st.balance + amt,
       streak: computeNextStreak(st.last_streak_date, st.streak),
       last_streak_date: toDateKey(new Date())
     })
+    if (!saved) return
     const { data: row } = await supabase.from('transactions').insert({
       user_id: userId, date_label: formatTxDate(new Date()), description: 'Setor manual', amount: amt, type: 'in'
     }).select().single()
-    setTx(prev => [row, ...prev])
+    if (row) setTx(prev => [row, ...prev])
     setAddAmt('')
     setFeedback({ type: 'success', amount: amt })
   }
 
   async function spendMoney() {
     const amt = parseThousands(spendAmt)
-    if (amt <= 0) return
-    if (amt > st.balance) {
-      setFeedback({ type: 'insufficient', amount: amt })
-      return
+    if (amt <= 0) {
+      setSpendError('Isi jumlah pengeluaran dulu.')
+      return false
     }
-    await saveStateRow({ balance: st.balance - amt })
+    const fromGoal = spendSource !== 'free' ? goalItems.find(g => g.id === spendSource) : null
+    const available = fromGoal ? (fromGoal.saved || 0) : st.balance
+    if (amt > available) {
+      setSpendError(`${fmt(amt)} lebih besar dari ${fromGoal ? 'tabungan ' + fromGoal.name : 'saldo bebas'} (${fmt(available)}).`)
+      return false
+    }
+
+    const nextItems = fromGoal
+      ? goalItems.map(g => g.id === fromGoal.id ? { ...g, saved: (g.saved || 0) - amt } : g)
+      : goalItems
+    const patch = fromGoal ? { goal_items: nextItems } : { balance: st.balance - amt }
+    const { error } = await supabase.from('user_state').update(patch).eq('user_id', userId)
+    if (error) {
+      setSpendError('Pengeluaran gagal disimpan: ' + error.message)
+      return false
+    }
+    if (fromGoal) {
+      storeGoalItems(userId, nextItems)
+      setGoalItems(nextItems)
+    }
+    setSt(prev => ({ ...prev, ...patch }))
+
+    const sourceName = fromGoal ? fromGoal.name : 'saldo bebas'
     const { data: row } = await supabase.from('transactions').insert({
       user_id: userId, date_label: formatTxDate(new Date()),
-      description: 'Pengeluaran: ' + spendCat, amount: amt, type: 'out', category: spendCat
+      description: `Pengeluaran: ${spendCat} (dari ${sourceName})`,
+      amount: amt, type: 'out', category: spendCat
     }).select().single()
-    setTx(prev => [row, ...prev])
+    if (row) setTx(prev => [row, ...prev])
+
     setSpendAmt('')
-    setFeedback({ type: 'spend-success', amount: amt, category: spendCat })
+    setSpendError('')
+    setFeedback({ type: 'spend-success', amount: amt, category: spendCat, source: fromGoal ? fromGoal.name : null })
+    return true
+  }
+
+  function openSpend() {
+    setSpendSource('free')
+    setSpendError('')
+    setSpendAmt('')
+    setSheet('out')
+  }
+
+  function openAlloc() {
+    const goal = goalItems.find(isGoalPrimary) || goalItems[0]
+    setAllocGoalId(goal?.id || null)
+    setAllocAmt(String(st.balance))
+    setSheet('alloc')
+  }
+
+  async function allocateToGoal() {
+    const goal = goalItems.find(g => g.id === allocGoalId)
+    const amt = Math.min(parseThousands(allocAmt), st.balance)
+    if (!goal || amt <= 0) return
+    const nextItems = goalItems.map(g =>
+      g.id === goal.id ? { ...g, saved: (g.saved || 0) + amt } : g)
+    const patch = { balance: st.balance - amt, goal_items: nextItems }
+    const { error } = await supabase.from('user_state').update(patch).eq('user_id', userId)
+    const savedLocally = storeGoalItems(userId, nextItems)
+    if (error && !savedLocally) {
+      alert('Alokasi gagal disimpan. Periksa koneksi lalu coba lagi.')
+      return
+    }
+    setSt(prev => ({ ...prev, ...patch }))
+    setGoalItems(nextItems)
+    setSheet(null)
+    setAllocAmt('')
+    setFeedback({ type: 'alloc-success', amount: amt, itemName: goal.name })
   }
 
   async function handleAllocChange(key, val) {
@@ -615,11 +688,18 @@ export default function HomePage() {
   const yesterdayKey = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return toDateKey(d) })()
   const streakAlive = st.last_streak_date === toDateKey(new Date()) || st.last_streak_date === yesterdayKey
   const activeStreak = streakAlive ? st.streak : 0
-  const { pct, remaining } = computeGoalProgress(st.balance, st.goal_target)
+
+  // Saldo dibagi dua kantong: saldo bebas (st.balance) dan tabungan target (saved per target)
+  const savedTotal = goalItems.reduce((sum, g) => sum + (g.saved || 0), 0)
+  const totalBalance = st.balance + savedTotal
+  const primaryGoal = goalItems.find(isGoalPrimary)
+  const primarySaved = primaryGoal?.saved || 0
+
+  const { pct, remaining } = computeGoalProgress(primarySaved, st.goal_target)
   const projectionTarget = parseThousands(moneyDrafts.proj_target ?? (st.proj_target ?? DEMO_STATE.proj_target))
   const proj = computeProjection({
     target: projectionTarget,
-    weekly: st.proj_weekly, daily: st.proj_daily, balance: st.balance
+    weekly: st.proj_weekly, daily: st.proj_daily, balance: primarySaved
   })
   const { totalIn, totalOut, net } = computeTotals(tx)
   const cats = computeCategoryBreakdown(tx)
@@ -648,9 +728,9 @@ export default function HomePage() {
   })
   const maxDailyExpense = Math.max(...weeklyActivity.map(day => day.expense), 1)
 
-  // Saldo akhir tiap hari: dihitung mundur dari saldo saat ini
+  // Saldo akhir tiap hari: dihitung mundur dari total saldo saat ini
   const dayBalances = []
-  let runningBalance = st.balance
+  let runningBalance = totalBalance
   for (let i = weeklyActivity.length - 1; i >= 0; i--) {
     dayBalances[i] = Math.max(0, runningBalance)
     runningBalance -= weeklyActivity[i].income - weeklyActivity[i].expense
@@ -701,22 +781,24 @@ export default function HomePage() {
             <section className="hero-card">
               <div className="hero-row">
                 <div>
-                  <p className="eyebrow light">Saldo saat ini</p>
-                  <div className="balance">{fmt(st.balance)}</div>
+                  <p className="eyebrow light">Total saldo</p>
+                  <div className="balance">{fmt(totalBalance)}</div>
                 </div>
                 {activeStreak > 0 && <div className="mini-chip">🔥 {activeStreak} hari</div>}
               </div>
-
-              {tx.length > 0 && <div className="summary-grid">
-                <div className="mini-stat income">
-                  <span>Masuk</span>
-                  <strong>{fmt(totalIn)}</strong>
+              <div className="split-grid">
+                <div className="split-box free">
+                  <span>Belum dialokasikan</span>
+                  <strong>{fmt(st.balance)}</strong>
+                  <button type="button" className="btn-alloc"
+                    disabled={st.balance <= 0 || !goalItems.length} onClick={openAlloc}>Alokasikan</button>
                 </div>
-                <div className="mini-stat expense">
-                  <span>Keluar</span>
-                  <strong>{fmt(totalOut)}</strong>
+                <div className="split-box">
+                  <span>Di tabungan target</span>
+                  <strong>{fmt(savedTotal)}</strong>
+                  <small>{primaryGoal ? `Target utama: ${primaryGoal.name}` : 'Belum ada target'}</small>
                 </div>
-              </div>}
+              </div>
             </section>
 
             {tx.length > 0 && <section className="card graph-card">
@@ -760,7 +842,7 @@ export default function HomePage() {
 
               <div className="chart-legend">
                 <span><i className="dot green" /> Saldo hari ini</span>
-                <strong>{fmt(st.balance)}</strong>
+                <strong>{fmt(totalBalance)}</strong>
               </div>
               <div className="chart-days chart-days-aligned">
                 {weeklyActivity.map(day => <span key={day.key}>{day.label}</span>)}
@@ -786,7 +868,7 @@ export default function HomePage() {
               <div className="section-head">
                 <div>
                   <span className="eyebrow">Target utama</span>
-                  <h2>🛼 {st.goal_name || 'Belum ada target'}</h2>
+                  <h2>🎁 {st.goal_name || 'Belum ada target'}</h2>
                 </div>
                 <span className="badge-pill">{st.goal_name ? `${pct}%` : '—'}</span>
               </div>
@@ -797,19 +879,9 @@ export default function HomePage() {
                   : remaining > 0 ? `${fmt(remaining)} lagi menuju ${fmt(st.goal_target)}` : 'Target tercapai! 🎉'}
               </div>
 
-              <div className="mini-head">💰 Tambah uang masuk</div>
-              <div className="row">
-                <input type="text" inputMode="numeric" value={formatThousands(addAmt)} onChange={e => setAddAmt(e.target.value.replace(/\D/g, ''))} placeholder="Rp jumlah..." />
-                <button className="btn-in" onClick={addMoney}>+ Masuk</button>
-              </div>
-
-              <div className="mini-head">🧾 Catat pengeluaran</div>
-              <div className="row split-row">
-                <select value={spendCat} onChange={e => setSpendCat(e.target.value)}>
-                  <option>Jajan</option><option>Mainan</option><option>Buku</option><option>Lainnya</option>
-                </select>
-                <input type="text" inputMode="numeric" value={formatThousands(spendAmt)} onChange={e => setSpendAmt(e.target.value.replace(/\D/g, ''))} placeholder="Rp jumlah..." />
-                <button className="btn-out" onClick={spendMoney}>- Catat</button>
+              <div className="action-row">
+                <button type="button" className="btn-in" onClick={() => setSheet('in')}>+ Uang masuk</button>
+                <button type="button" className="btn-out" onClick={openSpend}>- Catat keluar</button>
               </div>
             </section>
           </>
@@ -876,7 +948,7 @@ export default function HomePage() {
                     : <span className="goal-item-placeholder" aria-hidden="true">🎁</span>}
                   <div className="goal-item-details">
                     <strong>{item.name}</strong>
-                    <span>Target {fmt(item.target)}</span>
+                    <span>Tertabung {fmt(item.saved || 0)} dari {fmt(item.target)}</span>
                   </div>
                   <div className="goal-item-actions">
                     <button type="button" className="goal-edit-btn"
@@ -1148,7 +1220,7 @@ export default function HomePage() {
               <div className={activeStreak >= 30 ? 'badge' : 'badge locked'}>🥈<br />30 Hari</div>
               <div className={activeStreak >= 100 ? 'badge' : 'badge locked'}>🥇<br />100 Hari</div>
               <div className={st.alloc_tabung >= 50 ? 'badge' : 'badge locked'}>🍰<br />Bagi Rata</div>
-              <div className={st.balance >= st.goal_target ? 'badge' : 'badge locked'}>🎯<br />Target 1</div>
+              <div className={goalItems.some(g => g.target > 0 && (g.saved || 0) >= g.target) ? 'badge' : 'badge locked'}>🎯<br />Target 1</div>
               <div className="badge locked">🚲<br />Target 5</div>
             </div>
           </section>
@@ -1171,16 +1243,98 @@ export default function HomePage() {
         })}
       </nav>
 
+      {sheet && (
+        <div className="sheet-backdrop" onClick={() => setSheet(null)}>
+          <div className="sheet" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+            {sheet === 'in' && <>
+              <h2>Uang masuk</h2>
+              <p className="sheet-note">Uang masuk ke saldo yang belum dialokasikan.</p>
+              <input type="text" inputMode="numeric" placeholder="Rp jumlah..."
+                value={formatThousands(addAmt)} onChange={e => setAddAmt(e.target.value.replace(/\D/g, ''))} />
+              <button className="btn-in" onClick={async () => { await addMoney(); setSheet(null) }}>+ Masuk</button>
+            </>}
+            {sheet === 'out' && <>
+              <h2>Catat keluar</h2>
+              <p className="sheet-note">Diambil dari:</p>
+              <div className="alloc-goals">
+                <button type="button" className={spendSource === 'free' ? 'alloc-goal on' : 'alloc-goal'}
+                  onClick={() => { setSpendSource('free'); setSpendError('') }}>
+                  <strong>Saldo bebas</strong>
+                  <span>{fmt(st.balance)}</span>
+                </button>
+                {goalItems.filter(g => (g.saved || 0) > 0).map(g => (
+                  <button type="button" key={g.id}
+                    className={spendSource === g.id ? 'alloc-goal on' : 'alloc-goal'}
+                    onClick={() => { setSpendSource(g.id); setSpendError('') }}>
+                    <strong>Tabungan {g.name}</strong>
+                    <span>{fmt(g.saved)}</span>
+                  </button>
+                ))}
+              </div>
+              {spendSource !== 'free' && (() => {
+                const g = goalItems.find(x => x.id === spendSource)
+                if (!g) return null
+                const after = Math.max(0, (g.saved || 0) - parseThousands(spendAmt))
+                const pctAfter = g.target > 0 ? Math.round(after / g.target * 100) : 0
+                return <p className="sheet-warning">Progres {g.name} akan turun menjadi {pctAfter}%.</p>
+              })()}
+              <select value={spendCat} onChange={e => setSpendCat(e.target.value)}>
+                <option>Jajan</option><option>Mainan</option><option>Buku</option><option>Lainnya</option>
+              </select>
+              <input type="text" inputMode="numeric" placeholder="Rp jumlah..."
+                value={formatThousands(spendAmt)}
+                onChange={e => { setSpendAmt(e.target.value.replace(/\D/g, '')); setSpendError('') }} />
+              {spendError && <p className="sheet-error" role="alert">{spendError}</p>}
+              <button className="btn-out" onClick={async () => { const ok = await spendMoney(); if (ok) setSheet(null) }}>- Catat</button>
+            </>}
+            {sheet === 'alloc' && <>
+              <h2>Alokasikan uang</h2>
+              <p className="sheet-note">Tersedia {fmt(st.balance)}. Pilih target tujuan:</p>
+              <div className="alloc-goals">
+                {goalItems.map(g => (
+                  <button type="button" key={g.id} onClick={() => setAllocGoalId(g.id)}
+                    className={allocGoalId === g.id ? 'alloc-goal on' : 'alloc-goal'}>
+                    <strong>{g.name}</strong>
+                    <span>{fmt(g.saved || 0)} / {fmt(g.target)}</span>
+                  </button>
+                ))}
+              </div>
+              <input type="text" inputMode="numeric" placeholder="Rp jumlah..."
+                value={formatThousands(allocAmt)} onChange={e => setAllocAmt(e.target.value.replace(/\D/g, ''))} />
+              <div className="quick-row">
+                <button type="button" onClick={() => setAllocAmt(String(st.balance))}>Semua</button>
+                <button type="button" onClick={() => setAllocAmt(String(Math.floor(st.balance / 2)))}>Setengah</button>
+              </div>
+              <button className="btn-in" onClick={allocateToGoal}>Alokasikan sekarang</button>
+            </>}
+          </div>
+        </div>
+      )}
+
       {feedback && (
-        <div className={`feedback-screen ${feedback.type}`} role="dialog" aria-modal="true"
+        <div className={`feedback-screen ${feedback.type === 'alloc-success' ? 'success' : feedback.type}`} role="dialog" aria-modal="true"
           aria-labelledby="feedback-title">
+          {(feedback.type === 'success' || feedback.type === 'goal-added' || feedback.type === 'alloc-success') && (
+            <div className="confetti" aria-hidden="true">
+              {Array.from({ length: 40 }, (_, i) => (
+                <i key={i} style={{
+                  left: `${(i * 37) % 100}%`,
+                  background: ['#F2B705', '#FF6B57', '#ffffff', '#7be0b3', '#6ec6ff'][i % 5],
+                  animationDelay: `${(i % 10) * 0.12}s`,
+                  animationDuration: `${2.2 + (i % 5) * 0.4}s`
+                }} />
+              ))}
+            </div>
+          )}
           <div className="feedback-content">
             <div className="feedback-icon" aria-hidden="true">
-              {feedback.type === 'spend-success' ? '−'
-                : feedback.type === 'insufficient' || feedback.type === 'goal-save-error' ? '!' : '✓'}
+              {feedback.type === 'spend-success' ? '😢'
+                : feedback.type === 'insufficient' || feedback.type === 'goal-save-error' ? '!'
+                : feedback.type === 'success' || feedback.type === 'goal-added' || feedback.type === 'alloc-success' ? '🥳' : '✓'}
             </div>
             <p className="feedback-kicker">
-              {feedback.type === 'goal-added' ? 'Barang berhasil ditambahkan'
+              {feedback.type === 'alloc-success' ? 'Alokasi berhasil'
+                : feedback.type === 'goal-added' ? 'Barang berhasil ditambahkan'
                 : feedback.type === 'goal-updated' ? 'Barang berhasil diperbarui'
                   : feedback.type === 'goal-primary' ? 'Target utama diperbarui'
                 : feedback.type === 'goal-save-error' ? 'Penyimpanan gagal'
@@ -1188,23 +1342,25 @@ export default function HomePage() {
                     : feedback.type === 'success' ? 'Setoran berhasil' : 'Transaksi dibatalkan'}
             </p>
             <h2 id="feedback-title">
-              {feedback.type === 'goal-added' ? `Semangat, ${friendData.username || 'kamu'}!`
+              {feedback.type === 'alloc-success' ? `${fmt(feedback.amount)} masuk ke ${feedback.itemName}`
+                : feedback.type === 'goal-added' ? `Semangat, ${friendData.username || 'kamu'}!`
                 : feedback.type === 'goal-updated' ? `${feedback.itemName} berhasil diubah`
                   : feedback.type === 'goal-primary' ? `${feedback.itemName} jadi target utama!`
                 : feedback.type === 'goal-save-error' ? 'Barang belum tersimpan'
-                  : feedback.type === 'spend-success' ? 'Kamu mengeluarkan uang dari tabungan'
+                  : feedback.type === 'spend-success' ? 'Pengeluaran dicatat'
                     : feedback.type === 'success' ? 'Terima kasih sudah menabung!' : 'Uang tidak cukup'}
             </h2>
             <p className="feedback-message">
-              {(feedback.type === 'goal-added' || feedback.type === 'goal-updated' || feedback.type === 'goal-primary') && feedback.localOnly
+              {feedback.type === 'alloc-success' ? 'Uangmu sekarang aman di tabungan target.'
+                : (feedback.type === 'goal-added' || feedback.type === 'goal-updated' || feedback.type === 'goal-primary') && feedback.localOnly
                 ? 'Perubahan tersimpan di perangkat ini. Sinkronisasi akun perlu migrasi goal_items di Supabase.'
                 : feedback.type === 'goal-added' ? `${feedback.itemName} sudah masuk ke daftar targetmu. Menabung sedikit demi sedikit, semoga targetmu segera tercapai!`
                 : feedback.type === 'goal-updated' ? 'Detail barangmu sudah diperbarui.'
                   : feedback.type === 'goal-primary' ? 'Proyeksi dan beranda sekarang mengikuti target ini.'
                 : feedback.type === 'goal-save-error' ? 'Database belum memiliki kolom foto barang, foto profil, dan daftar target. Jalankan migrasi SQL agar barang bisa disimpan.'
-                  : feedback.type === 'spend-success' ? `${fmt(feedback.amount)} untuk ${feedback.category} sudah dicatat. Saldo celenganmu telah diperbarui.`
+                  : feedback.type === 'spend-success' ? `${fmt(feedback.amount)} untuk ${feedback.category} diambil dari ${feedback.source ? 'tabungan ' + feedback.source : 'saldo bebas'}.`
                   : feedback.type === 'success' ? `${fmt(feedback.amount)} berhasil ditambahkan ke celenganmu.`
-                    : `Pengeluaran ${fmt(feedback.amount)} melebihi saldo ${fmt(st.balance)}. Coba masukkan nominal yang lebih kecil.`}
+                    : `Pengeluaran ${fmt(feedback.amount)} melebihi saldo bebas ${fmt(st.balance)}. Coba masukkan nominal yang lebih kecil.`}
             </p>
             <button className="feedback-action" onClick={() => setFeedback(null)}>
               {feedback.type === 'insufficient' || feedback.type === 'goal-save-error' ? 'Mengerti'
