@@ -5,6 +5,7 @@ import {
   nextAlloc, computeGoalProgress, computeProjection,
   computeTotals, computeCategoryBreakdown
 } from '../lib/finance'
+import SharedGoals from '../components/SharedGoals'
 
 const fmt = n => 'Rp' + Math.round(n).toLocaleString('id-ID')
 const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
@@ -148,8 +149,18 @@ export default function HomePage() {
   const [friendsLoading, setFriendsLoading] = useState(false)
   const [spendSource, setSpendSource] = useState('free') // 'free' atau id target
   const [spendError, setSpendError] = useState('')
+  const [goalKind, setGoalKind] = useState('pribadi') // 'pribadi' | 'bersama'
+  const [sharedInvites, setSharedInvites] = useState(0)
 
   useEffect(() => { init() }, [])
+
+  useEffect(() => {
+    if (!userId) return
+    supabase.from('shared_goal_members')
+      .select('goal_id', { count: 'exact', head: true })
+      .eq('user_id', userId).eq('status', 'invited')
+      .then(({ count }) => setSharedInvites(count || 0))
+  }, [userId])
 
   async function init() {
     const { data: { session } } = await supabase.auth.getSession()
@@ -935,84 +946,109 @@ export default function HomePage() {
                 <h2>Barang impianmu</h2>
               </div>
             </div>
-            <div className="goal-list">
-              <div className="goal-list-heading">
-                <strong>Daftar target</strong>
-                <span>{goalItems.length} barang</span>
-              </div>
-              {!goalItems.length && <p className="goal-empty">Belum ada target. Tambahkan barang impianmu di bawah.</p>}
-              {goalItems.map(item => (
-                <div className={isGoalPrimary(item) ? 'goal-item primary-goal-item' : 'goal-item'} key={item.id}>
-                  {item.photo
-                    ? <img className="goal-item-photo" src={item.photo} alt="" />
-                    : <span className="goal-item-placeholder" aria-hidden="true">🎁</span>}
-                  <div className="goal-item-details">
-                    <strong>{item.name}</strong>
-                    <span>Tertabung {fmt(item.saved || 0)} dari {fmt(item.target)}</span>
-                  </div>
-                  <div className="goal-item-actions">
-                    <button type="button" className="goal-edit-btn"
-                      aria-label={`Edit ${item.name}`} onClick={() => editGoalItem(item)}>Edit</button>
-                    {isGoalPrimary(item)
-                      ? <span className="goal-main-label">Utama</span>
-                      : <button type="button" className="goal-main-btn"
-                          aria-label={`Jadikan ${item.name} target utama`}
-                          onClick={() => makeGoalPrimary(item.id)}>Jadikan utama</button>}
-                    <button type="button" className="goal-delete-btn"
-                      aria-label={`Hapus ${item.name}`} title={`Hapus ${item.name}`}
-                      onClick={() => removeGoalItem(item.id)}>Hapus</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="goal-form-heading">{editingGoalId ? 'Edit barang' : 'Tambah barang baru'}</div>
-            <label className="field-block">🎁 Nama barang impian:
-              <input type="text" maxLength={60} value={goalNameDraft}
-                placeholder="Contoh: Sepeda baru"
-                onChange={e => { setGoalNameDraft(e.target.value); setGoalError('') }} />
-            </label>
-            <label className="field-block">🚲 Harga target:
-              <input type="text" inputMode="numeric" value={formatThousands(moneyDrafts.proj_target ?? (st.proj_target || ''))}
-                onChange={e => { updateMoneyDraft('proj_target', e.target.value); setGoalError('') }} />
-            </label>
-            <label className="field-block">💰 Nabung /minggu:
-              <input type="text" inputMode="numeric" value={formatThousands(moneyDrafts.proj_weekly ?? (st.proj_weekly || ''))}
-                onChange={e => updateMoneyDraft('proj_weekly', e.target.value)}
-                onBlur={() => commitMoneyDraft('proj_weekly', DEMO_STATE.proj_weekly)} />
-            </label>
-            <label className="field-block">📅 Alternatif /hari:
-              <input type="text" inputMode="numeric" value={formatThousands(moneyDrafts.proj_daily ?? (st.proj_daily || ''))}
-                onChange={e => updateMoneyDraft('proj_daily', e.target.value)}
-                onBlur={() => commitMoneyDraft('proj_daily', DEMO_STATE.proj_daily)} />
-            </label>
 
-            <div className="photo-upload-block">
-              <label className="photo-upload-label">📷 Foto barang target</label>
-              <label className="photo-upload-box">
-                <input type="file" accept="image/*" onChange={handleGoalPhotoChange} />
-                {goalPhoto
-                  ? <img src={goalPhoto} alt="Foto barang target" className="photo-preview" />
-                  : <span className="photo-placeholder">Pilih foto barang</span>}
-              </label>
-            </div>
-
-            <div className="result">
-              {projectionTarget <= 0
-                ? 'Isi harga target dulu'
-                : proj.remaining === 0
-                ? 'Sudah cukup! 🎉'
-                : proj.weeksMain != null
-                  ? `≈ ${proj.weeksMain} minggu lagi`
-                  : 'Isi nominal mingguan dulu'}
-            </div>
-
-            {goalError && <p className="goal-error" role="alert">{goalError}</p>}
-            <div className="goal-form-actions">
-              <button type="button" className="goal-add-btn" onClick={addGoalItem}>
-                {editingGoalId ? 'Simpan perubahan' : '+ Tambah barang'}
+            <div className="sg-switch" role="tablist">
+              <button type="button" role="tab" aria-selected={goalKind === 'pribadi'}
+                className={goalKind === 'pribadi' ? 'sg-seg on' : 'sg-seg'}
+                onClick={() => setGoalKind('pribadi')}>Pribadi</button>
+              <button type="button" role="tab" aria-selected={goalKind === 'bersama'}
+                className={goalKind === 'bersama' ? 'sg-seg on' : 'sg-seg'}
+                onClick={() => setGoalKind('bersama')}>
+                Bersama {sharedInvites > 0 && <i className="sg-dot" aria-label="Ada undangan baru" />}
               </button>
-              {editingGoalId && <button type="button" className="goal-cancel-btn" onClick={cancelGoalEdit}>Batal</button>}
             </div>
+
+            {goalKind === 'bersama' ? (
+              <SharedGoals
+                supabase={supabase}
+                userId={userId}
+                friends={friendData.friends}
+                balance={st.balance}
+                onBalanceChange={balance => setSt(prev => ({ ...prev, balance }))}
+                onInvitesChange={setSharedInvites}
+              />
+            ) : (
+              <>
+                <div className="goal-list">
+                  <div className="goal-list-heading">
+                    <strong>Daftar target</strong>
+                    <span>{goalItems.length} barang</span>
+                  </div>
+                  {!goalItems.length && <p className="goal-empty">Belum ada target. Tambahkan barang impianmu di bawah.</p>}
+                  {goalItems.map(item => (
+                    <div className={isGoalPrimary(item) ? 'goal-item primary-goal-item' : 'goal-item'} key={item.id}>
+                      {item.photo
+                        ? <img className="goal-item-photo" src={item.photo} alt="" />
+                        : <span className="goal-item-placeholder" aria-hidden="true">🎁</span>}
+                      <div className="goal-item-details">
+                        <strong>{item.name}</strong>
+                        <span>Tertabung {fmt(item.saved || 0)} dari {fmt(item.target)}</span>
+                      </div>
+                      <div className="goal-item-actions">
+                        <button type="button" className="goal-edit-btn"
+                          aria-label={`Edit ${item.name}`} onClick={() => editGoalItem(item)}>Edit</button>
+                        {isGoalPrimary(item)
+                          ? <span className="goal-main-label">Utama</span>
+                          : <button type="button" className="goal-main-btn"
+                              aria-label={`Jadikan ${item.name} target utama`}
+                              onClick={() => makeGoalPrimary(item.id)}>Jadikan utama</button>}
+                        <button type="button" className="goal-delete-btn"
+                          aria-label={`Hapus ${item.name}`} title={`Hapus ${item.name}`}
+                          onClick={() => removeGoalItem(item.id)}>Hapus</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="goal-form-heading">{editingGoalId ? 'Edit barang' : 'Tambah barang baru'}</div>
+                <label className="field-block">🎁 Nama barang impian:
+                  <input type="text" maxLength={60} value={goalNameDraft}
+                    placeholder="Contoh: Sepeda baru"
+                    onChange={e => { setGoalNameDraft(e.target.value); setGoalError('') }} />
+                </label>
+                <label className="field-block">🚲 Harga target:
+                  <input type="text" inputMode="numeric" value={formatThousands(moneyDrafts.proj_target ?? (st.proj_target || ''))}
+                    onChange={e => { updateMoneyDraft('proj_target', e.target.value); setGoalError('') }} />
+                </label>
+                <label className="field-block">💰 Nabung /minggu:
+                  <input type="text" inputMode="numeric" value={formatThousands(moneyDrafts.proj_weekly ?? (st.proj_weekly || ''))}
+                    onChange={e => updateMoneyDraft('proj_weekly', e.target.value)}
+                    onBlur={() => commitMoneyDraft('proj_weekly', DEMO_STATE.proj_weekly)} />
+                </label>
+                <label className="field-block">📅 Alternatif /hari:
+                  <input type="text" inputMode="numeric" value={formatThousands(moneyDrafts.proj_daily ?? (st.proj_daily || ''))}
+                    onChange={e => updateMoneyDraft('proj_daily', e.target.value)}
+                    onBlur={() => commitMoneyDraft('proj_daily', DEMO_STATE.proj_daily)} />
+                </label>
+
+                <div className="photo-upload-block">
+                  <label className="photo-upload-label">📷 Foto barang target</label>
+                  <label className="photo-upload-box">
+                    <input type="file" accept="image/*" onChange={handleGoalPhotoChange} />
+                    {goalPhoto
+                      ? <img src={goalPhoto} alt="Foto barang target" className="photo-preview" />
+                      : <span className="photo-placeholder">Pilih foto barang</span>}
+                  </label>
+                </div>
+
+                <div className="result">
+                  {projectionTarget <= 0
+                    ? 'Isi harga target dulu'
+                    : proj.remaining === 0
+                    ? 'Sudah cukup! 🎉'
+                    : proj.weeksMain != null
+                      ? `≈ ${proj.weeksMain} minggu lagi`
+                      : 'Isi nominal mingguan dulu'}
+                </div>
+
+                {goalError && <p className="goal-error" role="alert">{goalError}</p>}
+                <div className="goal-form-actions">
+                  <button type="button" className="goal-add-btn" onClick={addGoalItem}>
+                    {editingGoalId ? 'Simpan perubahan' : '+ Tambah barang'}
+                  </button>
+                  {editingGoalId && <button type="button" className="goal-cancel-btn" onClick={cancelGoalEdit}>Batal</button>}
+                </div>
+              </>
+            )}
           </section>
         )}
 

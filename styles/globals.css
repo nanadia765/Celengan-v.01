@@ -1147,3 +1147,66 @@ body {
 
 .sheet-error { margin: 0; padding: 10px 12px; border-radius: 12px; background: #fff1ea; color: #9a3412; font-size: 14px; font-weight: 700; }
 .sheet-warning { margin: 0; padding: 10px 12px; border-radius: 12px; background: #fff8dc; color: #8a6d00; font-size: 14px; font-weight: 700; }
+
+/* Tempel di PALING BAWAH styles/globals.css
+   (memakai .sheet-backdrop, .sheet, .alloc-goal, .quick-row, .sheet-error dari langkah sebelumnya) */
+
+/* Pilihan Pribadi | Bersama */
+.sg-switch { display: flex; gap: 4px; padding: 4px; margin: 4px 0 14px; border-radius: 16px; background: #e3ece7; }
+.sg-seg { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: #5c7770; font-size: 14px; font-weight: 800; cursor: pointer; }
+.sg-seg.on { background: #1b4b43; color: #fff; }
+.sg-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff6b57; }
+
+/* Isi tab Bersama */
+.sg-wrap { display: flex; flex-direction: column; gap: 12px; }
+.sg-row { display: flex; align-items: center; gap: 12px; }
+.sg-between { justify-content: space-between; }
+.sg-grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sg-grow small, .sg-goal small, .sg-invite small, .sg-feed small { font-size: 12px; font-weight: 500; color: #5c7770; }
+.sg-muted { margin: 0; font-size: 13px; color: #5c7770; }
+.sg-heading { margin: 0; font-size: 20px; font-weight: 800; color: #17332e; }
+.sg-note { margin: 0; padding: 12px; border-radius: 14px; background: #fff8dc; color: #8a6d00; font-size: 13px; font-weight: 600; }
+.sg-error { margin: 0; padding: 10px 12px; border-radius: 12px; background: #fff1ea; color: #9a3412; font-size: 14px; font-weight: 700; }
+
+.sg-summary { display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 22px; background: #1b4b43; color: #fff; }
+.sg-summary span { font-size: 12px; font-weight: 700; color: #bfe9d8; }
+.sg-summary strong { font-size: 28px; font-weight: 800; }
+.sg-summary strong.sg-title { font-size: 22px; }
+.sg-summary small { font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, .85); }
+
+.sg-invite { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 20px; background: #fff8dc; }
+.sg-eyebrow { font-size: 12px; font-weight: 700; color: #5c7770; }
+.sg-eyebrow.warn { color: #8a6d00; }
+
+.sg-goal { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 20px; background: #f7faf8; border: 1px solid #e3ece7; }
+.sg-goal-name { font-size: 18px; font-weight: 800; color: #17332e; }
+.sg-tag { padding: 5px 10px; border-radius: 999px; background: #e6f2ec; color: #1b4b43; font-size: 12px; font-weight: 800; }
+.sg-mine { font-size: 13px; font-weight: 700; color: #237a64; }
+.sg-money { font-size: 14px; font-weight: 800; color: #237a64; }
+
+.sg-track { height: 10px; border-radius: 999px; background: #e3ece7; overflow: hidden; }
+.sg-track > div { height: 100%; border-radius: 999px; background: #237a64; transition: width .4s ease; }
+.sg-summary .sg-track { background: rgba(255, 255, 255, .25); }
+.sg-track.warm > div { background: #f2b705; }
+
+.sg-avatar { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 50%; border: 2px solid #fff; font-weight: 800; }
+.sg-stack { display: flex; align-items: center; }
+.sg-stack .sg-avatar + .sg-avatar { margin-left: -10px; }
+.sg-more { width: 32px; height: 32px; background: #e3ece7; color: #5c7770; font-size: 12px; }
+
+.sg-member { display: flex; flex-direction: column; gap: 8px; }
+.sg-feed { display: flex; flex-direction: column; gap: 2px; padding-top: 8px; font-size: 13px; font-weight: 700; color: #17332e; }
+
+.sg-actions { display: flex; gap: 10px; }
+.sg-primary, .sg-outline, .sg-danger { flex: 1; min-height: 48px; border-radius: 16px; font-size: 14px; font-weight: 800; cursor: pointer; }
+.sg-primary { border: 0; background: #237a64; color: #fff; }
+.sg-primary.sg-big { min-height: 52px; background: #1b4b43; font-size: 15px; }
+.sg-outline { border: 1px solid #cfdad5; background: #fff; color: #1b4b43; }
+.sg-danger { border: 1px solid #f0c9bd; background: #fff1ea; color: #9a3412; }
+.sg-primary:disabled, .sg-outline:disabled, .sg-danger:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Pilih teman */
+.sg-pick { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 2px solid #e3ece7; border-radius: 16px; background: #fff; font: inherit; font-weight: 800; color: #17332e; cursor: pointer; text-align: left; }
+.sg-pick.on { border-color: #237a64; background: #eef7f2; }
+.sg-check { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 2px solid #cfdad5; border-radius: 50%; background: #fff; color: #fff; font-size: 14px; }
+.sg-pick.on .sg-check { border-color: #237a64; background: #237a64; }
